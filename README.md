@@ -1,2 +1,3 @@
 # rag-docs-chat
-RAG: faça perguntas aos seus documentos (Go + pgvector + Claude)
+
+RAG: ask questions about your documents (Go + pgvector + Claude)
