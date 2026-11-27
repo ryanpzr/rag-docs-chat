@@ -1,0 +1,61 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: rag_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
+    ports:
+      - '${POSTGRES_PORT:-5433}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies db/migrations once the database is healthy, then exits.
+  migrate:
+    image: migrate/migrate:v4.18.1
+    container_name: rag_migrate
+    volumes:
+      - ./db/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag}@db:5432/${POSTGRES_DB:-rag}?sslmode=disable
+      - up
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:0.12.6
+    container_name: rag_ollama
+    restart: unless-stopped
+    ports:
+      - '${OLLAMA_PORT:-11434}:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Downloads the embeddings model into the shared volume, then exits.
+  ollama-pull:
+    image: ollama/ollama:0.12.6
+    container_name: rag_ollama_pull
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: ['ollama', 'pull', '${EMBEDDINGS_MODEL:-nomic-embed-text}']
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  ollama_data:
